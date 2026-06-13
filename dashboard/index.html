@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArmBench — Arm64 LLM Inference Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; }
+  header { background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 2rem; border-bottom: 1px solid #0f3460; }
+  header h1 { font-size: 2rem; color: #00d4ff; letter-spacing: 2px; }
+  header p { color: #888; margin-top: 0.5rem; }
+  .badge { display: inline-block; background: #0f3460; color: #00d4ff; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; margin-left: 1rem; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+  .platform-bar { background: #111; border: 1px solid #222; border-radius: 8px; padding: 1rem 1.5rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 1rem; }
+  .platform-bar span { color: #00d4ff; font-size: 0.85rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+  .card { background: #111; border: 1px solid #222; border-radius: 12px; padding: 1.5rem; transition: border-color 0.2s; }
+  .card:hover { border-color: #00d4ff; }
+  .card .label { font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+  .card .value { font-size: 2rem; font-weight: bold; color: #00d4ff; margin-top: 0.5rem; }
+  .card .sub { font-size: 0.8rem; color: #555; margin-top: 0.25rem; }
+  .section-title { font-size: 1rem; color: #888; text-transform: uppercase; letter-spacing: 2px; margin: 2rem 0 1rem; }
+  table { width: 100%; border-collapse: collapse; background: #111; border-radius: 12px; overflow: hidden; }
+  th { background: #0f3460; color: #00d4ff; padding: 0.75rem 1rem; text-align: left; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
+  td { padding: 0.75rem 1rem; border-bottom: 1px solid #1a1a1a; font-size: 0.9rem; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #161616; }
+  .quant { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+  .q4 { background: #0d3b2e; color: #00ff9d; }
+  .q8 { background: #2d1b00; color: #ffaa00; }
+  .bar-wrap { background: #1a1a1a; border-radius: 4px; height: 8px; width: 100%; }
+  .bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg, #00d4ff, #0066ff); }
+  .try-section { background: #111; border: 1px solid #222; border-radius: 12px; padding: 1.5rem; margin-top: 2rem; }
+  .try-section h3 { color: #00d4ff; margin-bottom: 1rem; }
+  textarea { width: 100%; background: #0a0a0a; border: 1px solid #333; color: #e0e0e0; padding: 0.75rem; border-radius: 8px; font-size: 0.9rem; resize: vertical; }
+  select { background: #0a0a0a; border: 1px solid #333; color: #e0e0e0; padding: 0.5rem; border-radius: 8px; margin: 0.5rem 0; }
+  button { background: #00d4ff; color: #000; border: none; padding: 0.6rem 1.5rem; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 0.5rem; }
+  button:hover { background: #00aacc; }
+  button.bench-btn { background: #0f3460; color: #00d4ff; margin-left: 0.5rem; }
+  .output-box { background: #0a0a0a; border: 1px solid #222; border-radius: 8px; padding: 1rem; margin-top: 1rem; font-size: 0.85rem; min-height: 80px; white-space: pre-wrap; color: #aaa; }
+  .stat-row { display: flex; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap; }
+  .stat-pill { background: #0f3460; color: #00d4ff; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; }
+  .loading { color: #555; font-style: italic; }
+  footer { text-align: center; padding: 2rem; color: #333; font-size: 0.8rem; border-top: 1px solid #111; margin-top: 3rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ ArmBench <span class="badge">v1.0.0</span></h1>
+  <p>KleidiAI-powered LLM Inference Benchmark Suite + MCP Server for Arm64</p>
+</header>
+
+<div class="container">
+  <div class="platform-bar">
+    <span>🖥️ Platform:</span>
+    <span id="platform-info" class="loading">Loading...</span>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="label">Best Tokens/sec</div>
+      <div class="value" id="best-tps">—</div>
+      <div class="sub" id="best-model">Run benchmark to see</div>
+    </div>
+    <div class="card">
+      <div class="label">Avg Time to First Token</div>
+      <div class="value" id="avg-ttft">—</div>
+      <div class="sub">milliseconds</div>
+    </div>
+    <div class="card">
+      <div class="label">Speedup Factor</div>
+      <div class="value" id="speedup">—</div>
+      <div class="sub">Q4 vs Q8</div>
+    </div>
+    <div class="card">
+      <div class="label">Models Tested</div>
+      <div class="value" id="model-count">—</div>
+      <div class="sub">quantization levels</div>
+    </div>
+  </div>
+
+  <div class="section-title">📊 Benchmark Results</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Model</th>
+        <th>Quant</th>
+        <th>Tokens/sec</th>
+        <th>TTFT (ms)</th>
+        <th>RAM (MB)</th>
+        <th>Size (GB)</th>
+        <th>Speed</th>
+      </tr>
+    </thead>
+    <tbody id="results-table">
+      <tr><td colspan="7" style="color:#444; text-align:center; padding:2rem;">Click "Run Benchmark" to populate results</td></tr>
+    </tbody>
+  </table>
+
+  <div class="try-section">
+    <h3>🧪 Try Inference</h3>
+    <textarea id="prompt-input" rows="3" placeholder="Enter a prompt...">What is KleidiAI and how does it optimize AI on Arm processors?</textarea>
+    <br>
+    <select id="model-select">
+      <option value="Llama-3.2-3B-Q4_K_M">Llama-3.2-3B Q4_K_M (Fast)</option>
+      <option value="Llama-3.2-3B-Q8_0">Llama-3.2-3B Q8_0 (Quality)</option>
+    </select>
+    <br>
+    <button onclick="runGenerate()">▶ Generate</button>
+    <button class="bench-btn" onclick="runBenchmark()">📊 Run Benchmark</button>
+    <div class="output-box" id="output-box">Output will appear here...</div>
+    <div class="stat-row" id="stat-row"></div>
+  </div>
+</div>
+
+<footer>ArmBench — Built for the Arm AI Optimization Challenge 2026 | Apache 2.0</footer>
+
+<script>
+const API = '';
+
+async function loadHealth() {
+  try {
+    const r = await fetch(API + '/health');
+    const d = await r.json();
+    document.getElementById('platform-info').textContent = d.platform;
+  } catch(e) {
+    document.getElementById('platform-info').textContent = 'Server not reachable';
+  }
+}
+
+async function loadModels() {
+  try {
+    const r = await fetch(API + '/models');
+    const d = await r.json();
+    document.getElementById('model-count').textContent = d.models.length;
+  } catch(e) {}
+}
+
+async function runGenerate() {
+  const prompt = document.getElementById('prompt-input').value;
+  const model = document.getElementById('model-select').value;
+  const box = document.getElementById('output-box');
+  const stats = document.getElementById('stat-row');
+  box.textContent = '⏳ Generating...';
+  stats.innerHTML = '';
+  try {
+    const r = await fetch(API + '/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt, model, max_tokens: 200})
+    });
+    const d = await r.json();
+    box.textContent = d.output;
+    stats.innerHTML = `
+      <span class="stat-pill">⚡ ${d.tokens_per_second.toFixed(1)} tok/s</span>
+      <span class="stat-pill">🕐 TTFT: ${d.time_to_first_token_ms.toFixed(0)}ms</span>
+      <span class="stat-pill">⏱ ${d.total_time_sec.toFixed(2)}s total</span>
+      <span class="stat-pill">🤖 ${d.model}</span>
+    `;
+  } catch(e) {
+    box.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function runBenchmark() {
+  const box = document.getElementById('output-box');
+  box.textContent = '⏳ Running benchmark across all models... this may take a minute.';
+  try {
+    const r = await fetch(API + '/benchmark', {method: 'POST'});
+    const d = await r.json();
+    updateDashboard(d);
+    box.textContent = '✅ Benchmark complete! See results table above.';
+  } catch(e) {
+    box.textContent = 'Error: ' + e.message;
+  }
+}
+
+function updateDashboard(data) {
+  if (data.summary) {
+    document.getElementById('best-tps').textContent = data.summary.best_tokens_per_second?.toFixed(1) || '—';
+    document.getElementById('best-model').textContent = data.summary.best_model || '—';
+    document.getElementById('speedup').textContent = (data.summary.speedup_factor || '—') + 'x';
+  }
+  const ttfts = data.results.map(r => r.time_to_first_token_ms).filter(Boolean);
+  if (ttfts.length) {
+    const avg = ttfts.reduce((a,b) => a+b, 0) / ttfts.length;
+    document.getElementById('avg-ttft').textContent = avg.toFixed(0);
+  }
+  const maxTps = Math.max(...data.results.map(r => r.tokens_per_second || 0));
+  const tbody = document.getElementById('results-table');
+  tbody.innerHTML = data.results.map(r => `
+    <tr>
+      <td>${r.model_name}</td>
+      <td><span class="quant ${r.quant_level.startsWith('Q4') ? 'q4' : 'q8'}">${r.quant_level}</span></td>
+      <td>${(r.tokens_per_second || 0).toFixed(1)}</td>
+      <td>${(r.time_to_first_token_ms || 0).toFixed(0)}</td>
+      <td>${(r.memory_used_mb || 0).toFixed(0)}</td>
+      <td>${r.model_size_gb}</td>
+      <td><div class="bar-wrap"><div class="bar" style="width:${((r.tokens_per_second||0)/maxTps*100).toFixed(0)}%"></div></div></td>
+    </tr>
+  `).join('');
+}
+
+loadHealth();
+loadModels();
+</script>
+</body>
+</html>
