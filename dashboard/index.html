@@ -165,7 +165,7 @@ async function runGenerate() {
 
 async function runBenchmark() {
   const box = document.getElementById('output-box');
-  box.textContent = '⏳ Running benchmark across all models... this may take a minute.';
+  box.textContent = '⏳ Running live inference on a real Arm64 server (Oracle Cloud Ampere A1 - aarch64). This takes 3-5 minutes because it is genuinely running on Arm hardware. Please wait...';
   try {
     const r = await fetch(API + '/benchmark', {method: 'POST'});
     const d = await r.json();
